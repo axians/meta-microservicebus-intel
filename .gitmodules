@@ -1,0 +1,6 @@
+[submodule "meta-microservicebus"]
+	path = meta-microservicebus
+	url = https://github.com/axians/meta-microservicebus.git
+[submodule "meta-microservicebus-dam"]
+	path = meta-microservicebus-dam
+	url = https://github.com/axians/meta-microservicebus-dam.git

@@ -1,6 +1,3 @@
 [submodule "meta-microservicebus"]
 	path = meta-microservicebus
 	url = https://github.com/axians/meta-microservicebus.git
-[submodule "meta-microservicebus-intel-nuc"]
-	path = meta-microservicebus-intel-nuc
-	url = git@github.com:axians/meta-microservicebus-intel-nuc.git

@@ -1,0 +1,16 @@
+[Unit]
+Description=Init AAEON, create home dir on data partition
+DefaultDependencies=no
+After=local-fs.target
+Before=rauc.service microservicebus-node.service docker.service
+Before=network-pre.target
+
+[Service]
+Type=notify
+ExecStart=/usr/bin/intel-aaeon-init.sh
+Restart=on-failure
+RestartSec=5s
+TimeoutSec=900
+
+[Install]
+WantedBy=multi-user.target

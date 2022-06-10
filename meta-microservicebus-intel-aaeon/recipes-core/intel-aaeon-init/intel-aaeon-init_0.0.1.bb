@@ -26,6 +26,12 @@ MSB_NODE_GROUP ??= "msb"
 RAUC_VAR_DIR ?= "/data/var/rauc"
 IOTEDGE ??= "FALSE"
 
+#inherit useradd
+#USERADD_PACKAGES = "${PN}"
+#GROUPADD_PARAM_${PN} = "-g 350 msb"
+# Create mongodb user
+#USERADD_PARAM_${PN} = "-u 400 -g 350 -r -s /bin/nologin mongodb"
+
 do_install() {
              
     # Replace parameters in script

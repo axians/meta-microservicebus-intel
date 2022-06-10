@@ -1,0 +1,1 @@
+0 0 * * * root /data/home/msb/microServiceBus/edge-install/quintus-backup.sh

@@ -35,15 +35,33 @@ if [ ! -d /dev/md0 ]; then
   SDA3_RAID=$(mdadm -E /dev/sda3 | grep "Raid Level" | awk '{print $4}')
   SDB3_RAID=$(mdadm -E /dev/sdb3 | grep "Raid Level" | awk '{print $4}')
   WORKINGDEVICES=$(mdadm -D /dev/md0 | grep 'Working Devices' | awk '{print $4}')
-  WORKINGDEVICES=$(echo $(mdadm -D /dev/md0 | grep 'Working Devices' ) |awk '{print length}')
-  DATA_IS_MOUNTED=$(echo $(df | grep /data ) |awk '{print length}')
+  DATA_IS_MOUNTED=$(df | grep /data | grep /dev/md0 |awk 'END{print NR}')
+  WRONGRAID=$(mdadm -D /dev/md127 | grep State |awk 'END{print NR}')
 
-  if [ "$WORKINGDEVICES" == 2 ] && [ "$DATA_IS_MOUNTED" -gt 0]; then
+  echo "SDA3_RAID: " $SDA3_RAID
+  echo "SDB3_RAID: " $SDB3_RAID
+  echo "WORKINGDEVICES: " $WORKINGDEVICES
+  echo "DATA_IS_MOUNTED: " $DATA_IS_MOUNTED
+  echo "WRONGRAID: " $WRONGRAID
+
+  if [[ "$WRONGRAID" -gt 0 ]]; then
+    mdadm --stop /dev/md127
+    rm /etc/mdadm.conf
+  fi
+
+  if [[ "$WORKINGDEVICES" == 2 && "$DATA_IS_MOUNTED" -gt 0 ]]; then
     echo "Partition has already been RAIDED. All good"
-  elif [ "$SDA3_RAID" == "raid1" ] || [ "$SDB3_RAID" == "raid1" ]; then
-    
+#  elif ([ $SDA3_RAID == "raid1" ] || [ $SDB3_RAID == "raid1" ]) && [ $WRONGRAID -eq 0 ]; then 
+  elif [ $SDA3_RAID == "raid1" ] || [ $SDB3_RAID == "raid1" ]; then 
     echo "Partition has already been RAIDED. Assebling RAID"
     
+    RAIDISASSEMBLED=$(mdadm --detail --scan | awk 'END{print NR}')
+    if [ "$RAIDISASSEMBLED" == 0 ]; then
+      echo "Assebling RAID"
+      mdadm --assemble /dev/md0 /dev/sda3 /dev/sdb3
+      mdadm --detail --scan >> /etc/mdadm.conf 
+    fi
+        
     FSTAB_RAID=$(echo $(cat /etc/fstab | grep /dev/md0 ) |awk '{print length}')
     if [ "$FSTAB_RAID" == 0 ]; then 
       echo "...Updating /etc/fstab"
@@ -54,17 +72,21 @@ if [ ! -d /dev/md0 ]; then
     if [ "$MDADM_RAID" == 0 ]; then
       echo "...Updating /etc/mdadm.conf "
       mdadm --detail --scan >> /etc/mdadm.conf 
-      mount -a
     fi
-    
+    mount -a
   else
     echo "Partition has never been RAIDED. CREATING RAID"
     yes | mdadm --create /dev/md0 --level=1 --raid-devices=2 /dev/sda3 /dev/sdb3
     mdadm --wait /dev/md0
-    yes | mkfs.ext4 /dev/md0
+    echo "...md0 has been created...creating file system..."
+    mkfs.ext4 /dev/md0
+    echo "...file system created...updating mdadm.conf..."
     mdadm --detail --scan >> /etc/mdadm.conf
     echo "/dev/md0 /data ext4 nofail 0 0" >> /etc/fstab
+    echo "...mdadm.conf updated...mounting /data"
     mount -a
+    echo ".../data is mounted"
+
   fi
 
   echo "RAID 1 setup complete"
@@ -129,7 +151,7 @@ if [ "${IOTEDGE}" = "TRUE" ]; then
 
       if [ $? -eq 0 ]; then
         echo "Successfully copied config.yaml. Setting permissions" | systemd-cat -p info -t "${me}"
-	chmod g+rw /data/home/iotedge/config.yaml
+	      chmod g+rw /data/home/iotedge/config.yaml
         chown iotedge:iotedge /data/home/iotedge/config.yaml
       else
         echo "Error, failed to copy config.yaml tp /data/home/iotedge" | systemd-cat -p warning -t "${me}"
@@ -149,15 +171,39 @@ if [ "${IOTEDGE}" = "TRUE" ]; then
     fi
 fi
 
-# Set hostname to serial number doesn't work on AAEON :(
-#/usr/sbin/dmidecode -s chassis-serial-number > /etc/hostname
+nmcli con show LAN1 2>&1 > /dev/null 
+if [ $? -ne 0 ]; then
+  echo "Setting up network connection for eth1"
+  nmcli con add type ethernet ifname eth1 con-name LAN1 ip4 192.168.100.12/24 
+  nmcli con up LAN1 || RESULT=4
 
-# Set iptables and alert rules
+  if [ $RESULT -eq 4 ]; then
+    echo "Connection to eth1 failed."
+  else
+    echo "Connection to eth1 successfully setup."
+  fi
+fi
+ 
+nmcli con show LAN2 2>&1 > /dev/null 
+if [ $? -ne 0 ]; then
+  echo "Setting up network connection for eth1"
+  nmcli con add type ethernet ifname eth2 con-name LAN2 ip4 192.168.102.11/24
+  nmcli con up LAN2 || RESULT=4
+
+  if [ $RESULT -eq 4 ]; then
+    echo "Connection to eth2 failed."
+  else
+    echo "Connection to eth2 successfully setup."
+  fi
+fi
+
+
+# Set iptables and alert rules 
 sudo iptables -N SSHATTACK
 sudo iptables -A SSHATTACK -j LOG --log-prefix "Possible SSH attack! " --log-level 7;
 sudo iptables -A SSHATTACK -j DROP;
-sudo iptables -A INPUT -i eth0 -p tcp -m state --dport 22 --state NEW -m recent --set;
-sudo iptables -A INPUT -i eth0 -p tcp -m state --dport 22 --state NEW -m recent --update --seconds 120 --hitcount 4 -j SSHATTACK;
+#sudo iptables -A INPUT -i eth0 -p tcp -m state --dport 22 --state NEW -m recent --set;
+#sudo iptables -A INPUT -i eth0 -p tcp -m state --dport 22 --state NEW -m recent --update --seconds 120 --hitcount 4 -j SSHATTACK;
 
 exit $RESULT
 
